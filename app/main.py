@@ -3,6 +3,7 @@ from fastapi import FastAPI
 from .config import settings
 from .db import engine, Base
 from .routers import ping, usuarios, routers as routers_api, ssh_test,snmp_test, topologia
+from .routers import monitor
 
 
 app = FastAPI(
@@ -17,6 +18,7 @@ app.include_router(routers_api.router)
 app.include_router(ssh_test.router)
 app.include_router(snmp_test.router)
 app.include_router(topologia.router)
+app.include_router(monitor.router)
 
 
 
