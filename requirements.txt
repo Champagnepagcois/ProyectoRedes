@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+sqlalchemy
+aiosqlite
+netmiko
+paramiko
+pysnmp
+matplotlib
+networkx
