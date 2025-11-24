@@ -1,17 +1,8 @@
 # app/services/monitor_service.py
 import asyncio
+import subprocess
 from datetime import datetime
 from typing import Tuple, List, Dict, Any
-
-from pysnmp.hlapi.asyncio import (
-    SnmpEngine,
-    CommunityData,
-    UdpTransportTarget,
-    ContextData,
-    ObjectType,
-    ObjectIdentity,
-    getCmd,
-)
 
 from app.config import settings
 
@@ -19,45 +10,67 @@ from app.config import settings
 LAST_OK: Dict[str, datetime] = {}
 
 
-# ---------- Helpers SNMP genéricos ----------
-
-async def snmp_get(host: str, oid: str, community: str | None = None) -> int:
+def snmp_get_raw(host: str, oid: str, community: str | None = None) -> int:
     """
-    Hace un SNMP GET y regresa el valor como int.
+    Ejecuta snmpget del sistema y regresa el valor como int.
     Lanza Exception si hay error.
     """
     if community is None:
         community = settings.SNMP_COMMUNITY
 
-    engine = SnmpEngine()
-    error_indication, error_status, error_index, var_binds = await getCmd(
-        engine,
-        CommunityData(community, mpModel=1),            # v2c
-        UdpTransportTarget((host, 161), timeout=2, retries=1),
-        ContextData(),
-        ObjectType(ObjectIdentity(oid)),
+    cmd = [
+        "snmpget",
+        "-v2c",
+        "-c",
+        community,
+        host,
+        oid,
+    ]
+
+    proc = subprocess.run(
+        cmd,
+        capture_output=True,
+        text=True,
+        timeout=3,
     )
 
-    if error_indication:
-        raise RuntimeError(f"SNMP error: {error_indication}")
-    if error_status:
-        raise RuntimeError(
-            f"{error_status.prettyPrint()} at {error_index and var_binds[int(error_index) - 1][0] or '?'}"
-        )
+    if proc.returncode != 0:
+        msg = proc.stderr.strip() or proc.stdout.strip()
+        raise RuntimeError(f"snmpget error: {msg}")
 
-    for oid, val in var_binds:
-        return int(val)
+    # Ejemplo de salida:
+    # SNMPv2-MIB::sysUpTime.0 = Timeticks: (1234567) 2 days, 3:12:34.00
+    # IF-MIB::ifInOctets.1 = Counter32: 123456
+    line = proc.stdout.strip()
+    # Nos quedamos con la parte después de ":" y convertimos a int si podemos
+    try:
+        after_equals = line.split("=", 1)[1].strip()
+        # after_equals ~ "Counter32: 123456" o "Timeticks: (12345) ..."
+        if ":" in after_equals:
+            _, val_part = after_equals.split(":", 1)
+            val_part = val_part.strip()
+        else:
+            val_part = after_equals
 
-    raise RuntimeError("SNMP: no varBinds")
+        # Para Timeticks: (123456) ...
+        if val_part.startswith("("):
+            num_str = val_part.split(")", 1)[0].strip("() ")
+        else:
+            # Counter32: 123456
+            num_str = val_part.split(" ", 1)[0]
+
+        return int(num_str)
+    except Exception as e:
+        raise RuntimeError(f"No se pudo parsear la salida SNMP: {line} ({e})")
 
 
-async def snmp_get_if_octets(
+def snmp_get_if_octets_sync(
     host: str,
     if_index: int,
     community: str | None = None,
 ) -> Tuple[int, int]:
     """
-    Regresa (ifInOctets, ifOutOctets) de una interfaz.
+    Regresa (ifInOctets, ifOutOctets) de una interfaz usando snmpget.
     OIDs IF-MIB:
       ifInOctets  = 1.3.6.1.2.1.2.2.1.10.X
       ifOutOctets = 1.3.6.1.2.1.2.2.1.16.X
@@ -65,24 +78,22 @@ async def snmp_get_if_octets(
     in_oid = f"1.3.6.1.2.1.2.2.1.10.{if_index}"
     out_oid = f"1.3.6.1.2.1.2.2.1.16.{if_index}"
 
-    in_octets = await snmp_get(host, in_oid, community)
-    out_octets = await snmp_get(host, out_oid, community)
+    in_octets = snmp_get_raw(host, in_oid, community)
+    out_octets = snmp_get_raw(host, out_oid, community)
     return in_octets, out_octets
 
 
-async def snmp_get_sysuptime(
+def snmp_get_sysuptime_sync(
     host: str,
     community: str | None = None,
 ) -> int:
     """
-    Regresa sysUpTime en ticks (1/100 segundos).
+    Regresa sysUpTime en ticks (1/100 segundos) con snmpget.
     OID: 1.3.6.1.2.1.1.3.0
     """
     oid = "1.3.6.1.2.1.1.3.0"
-    return await snmp_get(host, oid, community)
+    return snmp_get_raw(host, oid, community)
 
-
-# ---------- Lógica de monitoreo de octetos ----------
 
 async def monitor_interface_octets(
     host: str,
@@ -109,15 +120,22 @@ async def monitor_interface_octets(
     if seconds < 1:
         seconds = 1
 
-    # Primer muestreo
-    prev_in, prev_out = await snmp_get_if_octets(host, if_index, community)
+    loop = asyncio.get_event_loop()
+
+    # Primer muestreo (en thread, porque subprocess es bloqueante)
+    prev_in, prev_out = await loop.run_in_executor(
+        None, snmp_get_if_octets_sync, host, if_index, community
+    )
+
     samples: List[Dict[str, float]] = []
 
     for t in range(1, seconds + 1):
         await asyncio.sleep(1)
-        cur_in, cur_out = await snmp_get_if_octets(host, if_index, community)
 
-        # manejar posible wrap de contador (32 bits)
+        cur_in, cur_out = await loop.run_in_executor(
+            None, snmp_get_if_octets_sync, host, if_index, community
+        )
+
         delta_in = cur_in - prev_in
         delta_out = cur_out - prev_out
         if delta_in < 0:
@@ -147,19 +165,21 @@ async def monitor_interface_octets(
     }
 
 
-# ---------- Lógica de estado del router ----------
-
 async def get_router_state(host: str, community: str | None = None) -> Dict[str, Any]:
     """
-    Intenta hacer SNMP GET a sysUpTime.
+    Intenta hacer SNMP GET a sysUpTime con snmpget.
     Si responde: estado = UP, guarda timestamp de último OK.
     Si falla: estado = DOWN, calcula tiempo sin respuesta si se conoce.
     """
     global LAST_OK
     now = datetime.utcnow()
 
+    loop = asyncio.get_event_loop()
+
     try:
-        uptime_ticks = await snmp_get_sysuptime(host, community)
+        uptime_ticks = await loop.run_in_executor(
+            None, snmp_get_sysuptime_sync, host, community
+        )
         LAST_OK[host] = now
         uptime_seconds = uptime_ticks / 100.0
 
@@ -168,6 +188,7 @@ async def get_router_state(host: str, community: str | None = None) -> Dict[str,
             "uptime_seconds": uptime_seconds,
             "tiempo_sin_respuesta": 0.0,
             "ultima_respuesta": now.isoformat() + "Z",
+            "error": None,
         }
     except Exception as e:
         last_ok = LAST_OK.get(host)
