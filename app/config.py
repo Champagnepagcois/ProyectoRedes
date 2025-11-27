@@ -7,11 +7,11 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "sqlite+aiosqlite:///./redes.db"
 
     # 🔐 Credenciales para routers (modifícalas a las tuyas)
-    SSH_USERNAME: str = "cisco"
-    SSH_PASSWORD: str = "cisco"
+    SSH_USERNAME: str = "admin"
+    SSH_PASSWORD: str = "n0m3l0"
     SSH_SECRET: str | None = None  # si usas enable, pon la clave aquí
 
-    SNMP_COMMUNITY: str = "public"
+    SNMP_COMMUNITY: str = "REDES"
     SNMP_PORT: int = 161
 
     class Config:
