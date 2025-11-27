@@ -9,6 +9,7 @@ from app.config import settings
 # Memoria para último OK por router (para /estado)
 LAST_OK: Dict[str, datetime] = {}
 
+TRAP_STATE: Dict[tuple[str, int], Dict[str, Any]] = {}
 
 def snmp_get_raw(host: str, oid: str, community: str | None = None) -> int:
     """
@@ -81,6 +82,182 @@ def snmp_get_if_octets_sync(
     in_octets = snmp_get_raw(host, in_oid, community)
     out_octets = snmp_get_raw(host, out_oid, community)
     return in_octets, out_octets
+
+
+def snmp_get_if_status_sync(
+    host: str,
+    if_index: int,
+    community: str | None = None,
+) -> Dict[str, Any]:
+    """
+    Regresa adminStatus y operStatus de una interfaz:
+      ifAdminStatus: 1.3.6.1.2.1.2.2.1.7.X
+      ifOperStatus : 1.3.6.1.2.1.2.2.1.8.X
+    """
+    if community is None:
+        community = settings.SNMP_COMMUNITY
+
+    admin_oid = f"1.3.6.1.2.1.2.2.1.7.{if_index}"
+    oper_oid = f"1.3.6.1.2.1.2.2.1.8.{if_index}"
+
+    admin = snmp_get_raw(host, admin_oid, community)
+    oper = snmp_get_raw(host, oper_oid, community)
+
+    admin_map = {
+        1: "up",
+        2: "down",
+        3: "testing",
+    }
+    oper_map = {
+        1: "up",
+        2: "down",
+        3: "testing",
+        4: "unknown",
+        5: "dormant",
+        6: "notPresent",
+        7: "lowerLayerDown",
+    }
+
+    return {
+        "admin_status": admin,
+        "oper_status": oper,
+        "admin_status_text": admin_map.get(admin, f"unknown({admin})"),
+        "oper_status_text": oper_map.get(oper, f"unknown({oper})"),
+    }
+
+
+async def get_interface_state(
+    host: str,
+    if_index: int,
+    community: str | None = None,
+) -> Dict[str, Any]:
+    """
+    Regresa el estado actual de la interfaz y, si la captura de trampas
+    está activa, registra eventos linkUp/linkDown cuando cambia operStatus.
+    """
+    global TRAP_STATE
+    loop = asyncio.get_event_loop()
+
+    status = await loop.run_in_executor(
+        None, snmp_get_if_status_sync, host, if_index, community
+    )
+
+    key = (host, if_index)
+    now = datetime.utcnow()
+
+    info = TRAP_STATE.get(key)
+    if info is None:
+        info = {
+            "active": False,
+            "last_oper_status": status["oper_status"],
+            "last_change": None,
+            "events": [],
+        }
+        TRAP_STATE[key] = info
+    else:
+        if info["active"]:
+            prev = info.get("last_oper_status")
+            cur = status["oper_status"]
+
+            if prev is not None and cur != prev:
+                event_name = None
+                # Interpretamos cambio como trap lógico
+                if prev != 1 and cur == 1:
+                    event_name = "linkUp"
+                elif prev == 1 and cur != 1:
+                    event_name = "linkDown"
+
+                if event_name:
+                    ev = {
+                        "timestamp": now.isoformat() + "Z",
+                        "event": event_name,
+                        "old_status": prev,
+                        "new_status": cur,
+                    }
+                    info["events"].append(ev)
+                    # Opcional: limitar historial
+                    if len(info["events"]) > 100:
+                        info["events"] = info["events"][-100:]
+
+                info["last_change"] = now
+
+            info["last_oper_status"] = cur
+        else:
+            # Si no está activa la captura, solo actualizamos último estado
+            info["last_oper_status"] = status["oper_status"]
+
+    return {
+        "host": host,
+        "if_index": if_index,
+        "admin_status": status["admin_status"],
+        "oper_status": status["oper_status"],
+        "admin_status_text": status["admin_status_text"],
+        "oper_status_text": status["oper_status_text"],
+        "trap_capture_active": info["active"],
+        "last_change": info["last_change"].isoformat() + "Z"
+        if info["last_change"]
+        else None,
+        "events": info["events"],
+    }
+
+
+async def start_trap_capture(
+    host: str,
+    if_index: int,
+    community: str | None = None,
+) -> Dict[str, Any]:
+    """
+    Activa la captura lógica de trampas linkUp/linkDown en una interfaz.
+    """
+    global TRAP_STATE
+    key = (host, if_index)
+
+    loop = asyncio.get_event_loop()
+    status = await loop.run_in_executor(
+        None, snmp_get_if_status_sync, host, if_index, community
+    )
+
+    info = TRAP_STATE.get(key)
+    if info is None:
+        info = {
+            "active": True,
+            "last_oper_status": status["oper_status"],
+            "last_change": None,
+            "events": [],
+        }
+        TRAP_STATE[key] = info
+    else:
+        info["active"] = True
+        info["last_oper_status"] = status["oper_status"]
+
+    # Regresamos el estado actual (ya con active=True)
+    return await get_interface_state(host, if_index, community)
+
+
+async def stop_trap_capture(
+    host: str,
+    if_index: int,
+    community: str | None = None,
+) -> Dict[str, Any]:
+    """
+    Detiene la captura lógica de trampas linkUp/linkDown en una interfaz.
+    """
+    global TRAP_STATE
+    key = (host, if_index)
+
+    info = TRAP_STATE.get(key)
+    if info is None:
+        info = {
+            "active": False,
+            "last_oper_status": None,
+            "last_change": None,
+            "events": [],
+        }
+        TRAP_STATE[key] = info
+    else:
+        info["active"] = False
+
+    return await get_interface_state(host, if_index, community)
 
 
 def snmp_get_sysuptime_sync(

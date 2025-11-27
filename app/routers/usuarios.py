@@ -10,6 +10,13 @@ from sqlalchemy.orm import selectinload
 from app.db import get_db
 from app.models.router import Router, RouterUser
 
+from app.services.ssh_service import (
+    create_user_on_router,
+    update_user_on_router,
+    delete_user_on_router,
+)
+
+
 router = APIRouter(prefix="/usuarios", tags=["Usuarios globales"])
 
 
@@ -122,14 +129,15 @@ async def crear_usuario_global(
         db.add(new_user)
         r.users.append(new_user)
 
-        # Aquí podrías llamar a SSH para configurarlo en el router real
-        # (pseudocódigo):
-        # await ssh_create_user_on_router(
-        #     r.ip_admin,
-        #     user_in.username,
-        #     user_in.privilege,
-        #     user_in.permissions,
-        # )
+        try:
+            await create_user_on_router(
+                host=r.ip_admin,
+                username=user_in.username,
+                privilege=user_in.privilege,
+            )
+        except Exception as e:
+            # Si falla en algún router, puedes loguear y seguir, o hacer rollback.
+            print(f"Error creando usuario {user_in.username} en {r.hostname}: {e}")
 
     await db.commit()
 
@@ -171,12 +179,17 @@ async def actualizar_usuario_global(
         if user_in.permissions is not None:
             u.permissions = user_in.permissions
 
-        # Aquí iría la actualización por SSH en el router real
-        # await ssh_update_user_on_router(...)
+        try:
+            await update_user_on_router(
+                host=u.router.ip_admin,
+                username=u.username,
+                privilege=u.privilege,
+            )
+        except Exception as e:
+            print(f"Error actualizando usuario {u.username} en {u.router.hostname}: {e}")
 
     await db.commit()
 
-    # Para la respuesta usamos el primer registro como referencia
     ref = usuarios_en_red[0]
     urls = build_user_urls(ref.username, routers)
     return GlobalUserRead(
@@ -213,9 +226,15 @@ async def eliminar_usuario_global(
 
     # Borrar de todos los routers
     for u in usuarios_en_red:
+        try:
+            await delete_user_on_router(
+                host=u.router.ip_admin,
+                username=u.username,
+            )
+        except Exception as e:
+            print(f"Error borrando usuario {u.username} en {u.router.hostname}: {e}")
+
         await db.delete(u)
-        # Aquí iría la eliminación por SSH:
-        # await ssh_delete_user_on_router(...)
 
     await db.commit()
 

@@ -1,0 +1,43 @@
+curl -X POST "http://localhost:8000/routers/Edge/usuarios/" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "admin",
+    "privilege": 15,
+    "permissions": "full"
+  }'
+
+
+curl -X POST "http://localhost:8000/routers/R1/usuarios/" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "admin",
+    "privilege": 15,
+    "permissions": "full"
+  }'
+
+
+curl -X POST "http://localhost:8000/routers/R2/usuarios/" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "admin",
+    "privilege": 15,
+    "permissions": "full"
+  }'
+
+
+curl -X POST "http://localhost:8000/routers/TOR-1/usuarios/" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "admin",
+    "privilege": 15,
+    "permissions": "full"
+  }'
+
+
+curl -X POST "http://localhost:8000/routers/TOR-2/usuarios/" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "admin",
+    "privilege": 15,
+    "permissions": "full"
+  }'

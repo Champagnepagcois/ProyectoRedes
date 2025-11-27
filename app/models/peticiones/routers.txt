@@ -1,0 +1,237 @@
+/****EDGE****/
+
+curl -X POST "http://localhost:8000/routers/" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "hostname": "Edge",
+    "ip_admin": "192.168.100.1",
+    "loopback": "192.168.50.1",
+    "role": "Edge",
+    "vendor": "Cisco",
+    "os_version": "IOS",
+    "interfaces": [
+      {
+        "name": "f1_0",
+        "ip_address": "10.0.0.1",
+        "mask": "255.255.255.252",
+        "status": "up",
+        "protocol": "up",
+        "neighbor_hostname": "R1"
+      },
+      {
+        "name": "f1_1",
+        "ip_address": "10.0.0.5",
+        "mask": "255.255.255.252",
+        "status": "up",
+        "protocol": "up",
+        "neighbor_hostname": "R2"
+      },
+      {
+        "name": "loopback0",
+        "ip_address": "192.168.50.1",
+        "mask": "255.255.255.255",
+        "status": "up",
+        "protocol": "up"
+      },
+      {
+        "name": "loopback100",
+        "ip_address": "192.168.100.1",
+        "mask": "255.255.255.255",
+        "status": "up",
+        "protocol": "up"
+      }
+    ]
+  }'
+
+/****R1****/
+
+
+  curl -X POST "http://localhost:8000/routers/" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "hostname": "R1",
+    "ip_admin": "192.168.100.2",
+    "loopback": "192.168.50.2",
+    "role": "Core",
+    "vendor": "Cisco",
+    "os_version": "IOS",
+    "interfaces": [
+      {
+        "name": "f1_0",
+        "ip_address": "10.0.0.2",
+        "mask": "255.255.255.252",
+        "status": "up",
+        "protocol": "up",
+        "neighbor_hostname": "Edge"
+      },
+      {
+        "name": "f1_1",
+        "ip_address": "10.0.0.9",
+        "mask": "255.255.255.252",
+        "status": "up",
+        "protocol": "up",
+        "neighbor_hostname": "TOR-1"
+      },
+      {
+        "name": "f1_2",
+        "ip_address": "10.0.0.13",
+        "mask": "255.255.255.252",
+        "status": "up",
+        "protocol": "up",
+        "neighbor_hostname": "TOR-2"
+      },
+      {
+        "name": "loopback0",
+        "ip_address": "192.168.50.2",
+        "mask": "255.255.255.255",
+        "status": "up",
+        "protocol": "up"
+      },
+      {
+        "name": "loopback100",
+        "ip_address": "192.168.100.2",
+        "mask": "255.255.255.255",
+        "status": "up",
+        "protocol": "up"
+      }
+    ]
+  }'
+
+
+
+/****R2****/
+
+curl -X POST "http://localhost:8000/routers/" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "hostname": "R2",
+    "ip_admin": "192.168.100.3",
+    "loopback": "192.168.50.3",
+    "role": "Core",
+    "vendor": "Cisco",
+    "os_version": "IOS",
+    "interfaces": [
+      {
+        "name": "f1_0",
+        "ip_address": "10.0.0.6",
+        "mask": "255.255.255.252",
+        "status": "up",
+        "protocol": "up",
+        "neighbor_hostname": "Edge"
+      },
+      {
+        "name": "loopback0",
+        "ip_address": "192.168.50.3",
+        "mask": "255.255.255.255",
+        "status": "up",
+        "protocol": "up"
+      },
+      {
+        "name": "loopback100",
+        "ip_address": "192.168.100.3",
+        "mask": "255.255.255.255",
+        "status": "up",
+        "protocol": "up"
+      }
+    ]
+  }'
+
+  /****TOR-1****/
+curl -X POST "http://localhost:8000/routers/" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "hostname": "TOR-1",
+    "ip_admin": "192.168.100.4",
+    "loopback": "192.168.50.4",
+    "role": "TOR",
+    "vendor": "Cisco",
+    "os_version": "IOS",
+    "interfaces": [
+      {
+        "name": "f1_0",
+        "ip_address": "192.168.0.1",
+        "mask": "255.255.255.0",
+        "status": "up",
+        "protocol": "up"
+      },
+      {
+        "name": "f1_1",
+        "ip_address": "192.168.1.1",
+        "mask": "255.255.255.0",
+        "status": "up",
+        "protocol": "up"
+      },
+      {
+        "name": "f1_2",
+        "ip_address": "10.0.0.10",
+        "mask": "255.255.255.252",
+        "status": "up",
+        "protocol": "up",
+        "neighbor_hostname": "R1"
+      },
+      {
+        "name": "loopback0",
+        "ip_address": "192.168.50.4",
+        "mask": "255.255.255.255",
+        "status": "up",
+        "protocol": "up"
+      },
+      {
+        "name": "loopback100",
+        "ip_address": "192.168.100.4",
+        "mask": "255.255.255.255",
+        "status": "up",
+        "protocol": "up"
+      }
+    ]
+  }'
+/****TOR-2****/
+
+curl -X POST "http://localhost:8000/routers/" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "hostname": "TOR-2",
+    "ip_admin": "192.168.100.5",
+    "loopback": "192.168.50.5",
+    "role": "TOR",
+    "vendor": "Cisco",
+    "os_version": "IOS",
+    "interfaces": [
+      {
+        "name": "f1_0",
+        "ip_address": "192.168.10.1",
+        "mask": "255.255.255.0",
+        "status": "up",
+        "protocol": "up"
+      },
+      {
+        "name": "f1_1",
+        "ip_address": "192.168.11.1",
+        "mask": "255.255.255.0",
+        "status": "up",
+        "protocol": "up"
+      },
+      {
+        "name": "f1_2",
+        "ip_address": "10.0.0.14",
+        "mask": "255.255.255.252",
+        "status": "up",
+        "protocol": "up",
+        "neighbor_hostname": "R1"
+      },
+      {
+        "name": "loopback0",
+        "ip_address": "192.168.50.5",
+        "mask": "255.255.255.255",
+        "status": "up",
+        "protocol": "up"
+      },
+      {
+        "name": "loopback100",
+        "ip_address": "192.168.100.5",
+        "mask": "255.255.255.255",
+        "status": "up",
+        "protocol": "up"
+      }
+    ]
+  }'

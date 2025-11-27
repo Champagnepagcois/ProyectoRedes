@@ -1,15 +1,15 @@
-# app/config.py
-from pydantic_settings import BaseSettings  # ya lo tenías así
+from pydantic_settings import BaseSettings 
 
 class Settings(BaseSettings):
     APP_NAME: str = "API Redes"
     APP_VERSION: str = "0.1.0"
     DATABASE_URL: str = "sqlite+aiosqlite:///./redes.db"
 
-    # 🔐 Credenciales para routers (modifícalas a las tuyas)
     SSH_USERNAME: str = "admin"
     SSH_PASSWORD: str = "n0m3l0"
-    SSH_SECRET: str | None = None  # si usas enable, pon la clave aquí
+    SSH_SECRET: str | None = None  
+    
+    NEW_USER_PASSWORD: str = "Redes2025"
 
     SNMP_COMMUNITY: str = "REDES"
     SNMP_PORT: int = 161

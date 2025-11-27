@@ -9,6 +9,12 @@ from sqlalchemy.orm import selectinload
 from app.db import get_db
 from app.models.router import Router, Interface, RouterUser
 
+from app.services.ssh_service import (
+    create_user_on_router,
+    update_user_on_router,
+    delete_user_on_router,
+)
+
 router = APIRouter(prefix="/routers", tags=["Routers"])
 
 
@@ -201,6 +207,18 @@ async def crear_usuario_router(
         router_id=router.id,
     )
     db.add(user)
+
+    # Crear usuario en el router real vía SSH
+    try:
+        await create_user_on_router(
+            host=router.ip_admin,
+            username=user_in.username,
+            privilege=user_in.privilege,
+        )
+    except Exception as e:
+        print(f"Error creando usuario {user_in.username} en {router.hostname}: {e}")
+        # si quieres, podrías hacer: await db.rollback(); y lanzar HTTPException
+
     await db.commit()
     await db.refresh(user)
     return user
@@ -236,6 +254,15 @@ async def actualizar_usuario_router(
     if user_in.permissions is not None:
         user.permissions = user_in.permissions
 
+    try:
+        await update_user_on_router(
+            host=router.ip_admin,
+            username=user.username,
+            privilege=user.privilege,
+        )
+    except Exception as e:
+        print(f"Error actualizando usuario {user.username} en {router.hostname}: {e}")
+
     await db.commit()
     await db.refresh(user)
     return user
@@ -264,6 +291,14 @@ async def eliminar_usuario_router(
     user = result_user.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=404, detail="Usuario no encontrado en este router")
+
+    try:
+        await delete_user_on_router(
+            host=router.ip_admin,
+            username=user.username,
+        )
+    except Exception as e:
+        print(f"Error borrando usuario {user.username} en {router.hostname}: {e}")
 
     await db.delete(user)
     await db.commit()
